@@ -1,0 +1,6 @@
+[submodule "pyamgx"]
+	path = pyamgx
+	url = https://github.com/yanang007/pyamgx
+[submodule "AMGX"]
+	path = AMGX
+	url = https://github.com/yanang007/AMGX
