@@ -10,13 +10,8 @@ jobs:
         include:
           - os: windows-2022
             cuda: "12.2.0"
-#            visual_studio: "Visual Studio 17 2022"
           - os: windows-2022
             cuda: "11.8.0"
-#            visual_studio: "Visual Studio 17 2022"
-#          - os: windows-2019
-#            cuda: "10.2.89"
-#            visual_studio: "Visual Studio 16 2019"
           - os: ubuntu-20.04
             cuda: "11.8.0"
 
@@ -32,15 +27,16 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Cache AMGX
-      id: cache-amgx
-      uses: actions/cache@v3
+    - name: Restore Cached AMGX
+      id: restore-amgx
+      uses: actions/cache/restore@v3
       with:
         path: ${{ env.amgx_build_dir }}
         key: ${{ runner.os }}-${{ matrix.cuda }}-amgx
 
-    - uses: Jimver/cuda-toolkit@v0.2.11
-      if: steps.cache-amgx.outputs.cache-hit != 'true' && runner.os == 'Linux'
+    - name: Setup CUDA (Linux)
+      uses: Jimver/cuda-toolkit@v0.2.11
+      if: steps.restore-amgx.outputs.cache-hit != 'true' && runner.os == 'Linux'
       id: setup-cuda-toolkit-linux
       with:
         cuda: ${{ matrix.cuda }}
@@ -48,8 +44,9 @@ jobs:
         sub-packages: '["nvcc", "cudart", "thrust", "nvtx", "nvrtc-dev"]'
         non-cuda-sub-packages: '["libcurand-dev", "libcublas-dev", "libcusparse-dev", "libcusolver-dev"]'
 
-    - uses: Jimver/cuda-toolkit@v0.2.11
-      if: steps.cache-amgx.outputs.cache-hit != 'true' && runner.os == 'Windows'
+    - name: Setup CUDA (Windows)
+      uses: Jimver/cuda-toolkit@v0.2.11
+      if: steps.restore-amgx.outputs.cache-hit != 'true' && runner.os == 'Windows'
       id: setup-cuda-toolkit-windows
       with:
         cuda: ${{ matrix.cuda }}
@@ -57,13 +54,13 @@ jobs:
         sub-packages: '["nvcc", "curand_dev", "nvrtc_dev", "cudart", "thrust", "cublas_dev", "cusparse_dev", "cusolver_dev", "nvtx", "visual_studio_integration"]'
 
     - name: Configure CMake
-      if: steps.cache-amgx.outputs.cache-hit != 'true'
+      if: steps.restore-amgx.outputs.cache-hit != 'true'
       id: configure
       shell: bash
       run: cmake ${{ env.amgx_dir }} -B ${{ env.amgx_build_dir }} -DCMAKE_BUILD_TYPE=${{ env.config }}
 
     - name: Configure Error Processing
-      if: ${{ (steps.cache-amgx.outputs.cache-hit != 'true') && (failure() && steps.configure.outcome == 'failure') || success() }}
+      if: ${{ (steps.restore-amgx.outputs.cache-hit != 'true') && (failure() && steps.configure.outcome == 'failure') || success() }}
       shell: bash
       run: |
           if [[ -d "${{ env.amgx_build_dir }}" ]]; then
@@ -81,13 +78,20 @@ jobs:
           fi
 
     - name: Build AMGX
-      if: steps.cache-amgx.outputs.cache-hit != 'true'
+      if: steps.restore-amgx.outputs.cache-hit != 'true'
       working-directory: ${{ env.amgx_build_dir }}
       run: cmake --build . -j2 --config ${{ env.config }} --verbose --target amgxsh
 
-    - uses: actions/setup-python@v5
+    - name: Cache AMGX
+      if: steps.restore-amgx.outputs.cache-hit != 'true'
+      id: cache-amgx
+      uses: actions/cache/save@v3
+      with:
+        path: ${{ env.amgx_build_dir }}
+        key: ${{ steps.restore-amgx.outputs.cache-primary-key }}
 
-    - uses: wntrblm/nox@2023.04.22
+    - name: Setup Nox
+      uses: wntrblm/nox@2023.04.22
       with:
         python-versions: ${{ env.python_versions }}
 
@@ -96,8 +100,10 @@ jobs:
         AMGX_DIR: ${{ env.amgx_dir }}
         AMGX_BUILD_DIR: ${{ env.amgx_build_dir }}
         NOXFORCEPYTHON: ${{ env.python_versions }}
-      run: nox --noxfile .\scripts\build.py --sessions build_bdist
+      run: nox --noxfile ./scripts/build.py --sessions build_bdist
 
-    - uses: actions/upload-artifact@v4
+    - name: Upload Wheels
+      uses: actions/upload-artifact@v4
       with:
+        name: Wheels-${{ runner.os }}-cu${{ matrix.cuda }}
         path: ${{ env.pyamgx_dir }}/dist/*.whl
