@@ -113,3 +113,8 @@ jobs:
       with:
         name: Wheels-${{ runner.os }}-cu${{ matrix.cuda }}
         path: ${{ env.pyamgx_dir }}/dist/*.whl
+
+    - name: Upload Wheels Individually
+      uses: kittaakos/upload-artifact-as-is@v0
+      with:
+        path: ${{ env.pyamgx_dir }}/dist/*.whl
