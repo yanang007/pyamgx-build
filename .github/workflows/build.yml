@@ -99,14 +99,15 @@ jobs:
       env:
         AMGX_DIR: ${{ env.amgx_dir }}
         AMGX_BUILD_DIR: ${{ env.amgx_build_dir }}
+        PYAMGX_DIR: ${{ env.pyamgx_dir }}
         NOXFORCEPYTHON: ${{ env.python_versions }}
       run: nox --noxfile ./scripts/build.py --sessions build_bdist
 
     - name: Rename Wheels
-      shell: bash
       env:
-        NEW_NAME: pyamgx-cu${{ matrix.cuda }}
-      run: rename "s/pyamgx/$NEW_NAME/" ${{ env.pyamgx_dir }}/dist/*.whl
+        PYAMGX_DIR: ${{ env.pyamgx_dir }}
+        CUDA_VERSION: ${{ matrix.cuda }}
+      run: nox --noxfile ./scripts/postprocess.py --sessions rename_wheels
 
     - name: Upload Wheels
       uses: actions/upload-artifact@v4
